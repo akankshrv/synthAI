@@ -1,0 +1,15 @@
+POST /api/search  ←  user query
+    ↓
+Tavily API  →  top 5 URLs
+    ↓
+Jina Reader (async fetch all URLs in parallel)
+    ↓
+Chunk text into paragraphs
+    ↓
+Embed with sentence-transformers (local, free)
+    ↓
+Chroma in-memory collection → top 8 chunks
+    ↓
+Build prompt with chunks + query
+    ↓
+Stream OpenRouter LLM response → frontend

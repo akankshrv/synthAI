@@ -1,0 +1,62 @@
+Great question. Here's how each dimension scales:
+
+---
+
+**AI Side**
+
+Start with a single OpenRouter model, then grow into:
+- **Model routing**: use a fast/cheap model (GLM 4.5 Air) for simple queries, escalate to a stronger one (Nemotron 3 Super) for complex ones based on query classification
+- **Multi-turn conversations**: maintain chat history per session so users can ask follow-up questions like Perplexity's "Threads" feature
+- **Query rewriting**: before searching, have the LLM rewrite the raw user query into a better search query
+- **Answer grading**: after generating, have a second LLM call score the answer for relevance and hallucination risk
+- **Tool use**: give the LLM tools like a calculator, code executor, or weather API so it can do more than just summarize web content
+
+---
+
+**RAG Side**
+
+Start with in-memory Chroma per query, then grow into:
+- **Persistent vector store**: move to Supabase pgvector so cached results survive restarts
+- **Hybrid search**: combine semantic search (embeddings) with keyword search (BM25) for better retrieval, since pure vector search misses exact matches
+- **Reranking**: after retrieval, run a cross-encoder reranker (free with `sentence-transformers`) to reorder chunks by true relevance before passing to the LLM
+- **Chunking strategy**: move from naive paragraph splitting to semantic chunking (split on meaning boundaries, not just newlines)
+- **User knowledge base**: let users upload PDFs/docs that get embedded into a personal persistent collection, blended with web results per query
+- **Parent document retrieval**: embed small chunks for precision but retrieve their larger parent chunks for richer context
+
+---
+
+**Architecture Side**
+
+Start with a single `main.py`, then grow into:
+
+```
+app/
+├── api/
+│   ├── routes/
+│   │   ├── search.py
+│   │   ├── history.py
+│   │   └── upload.py
+├── core/
+│   ├── config.py        # env vars, settings
+│   └── dependencies.py  # FastAPI dependency injection
+├── services/
+│   ├── search.py        # Brave/Tavily calls
+│   ├── scraper.py       # Jina fetch + chunking
+│   ├── embedder.py      # sentence-transformers
+│   ├── retriever.py     # Chroma logic
+│   └── llm.py           # OpenRouter streaming
+├── models/
+│   └── schemas.py       # Pydantic request/response models
+└── main.py
+```
+
+Other architectural upgrades worth adding over time:
+- **Redis** for caching frequent queries and rate limiting
+- **Background tasks**: FastAPI's `BackgroundTasks` to pre-embed pages asynchronously while streaming the answer
+- **Auth**: add JWT-based user auth so each user gets their own vector store and history
+- **Queue**: for heavy workloads, add a task queue like **Celery + Redis** so long scraping jobs don't block the API
+- **Observability**: add logging and request tracing early so you can debug retrieval quality
+
+---
+
+The natural progression is: get the basic pipeline working in `main.py` first, then extract into `services/`, then add persistent storage, then layer in the smarter AI features once the plumbing is solid.
