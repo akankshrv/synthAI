@@ -40,8 +40,10 @@ class Settings(BaseSettings):
     chunk_size_tokens: int = 500
     chunk_overlap_tokens: int = 50
 
-    # Query rewriting
+    # Query rewriting / conversation
     enable_query_rewrite: bool = True
+    enable_query_contextualization: bool = True
+    max_history_turns: int = 6
     query_rewrite_model: str = "openai/gpt-oss-20b:free"
     query_rewrite_timeout: float = 15.0
 

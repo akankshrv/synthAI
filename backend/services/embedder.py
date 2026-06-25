@@ -5,6 +5,8 @@ from core.config import settings
 _model: SentenceTransformer | None = None
 _cross_encoder: CrossEncoder | None = None
 
+BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
 
 def _use_bge_query_prompt() -> bool:
     return "bge" in settings.embedding_model.lower()
@@ -33,10 +35,8 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 def embed_query(query: str) -> list[float]:
     if _model is None:
         raise RuntimeError("Embedding model not loaded")
-    if _use_bge_query_prompt():
-        vector = _model.encode([query], prompt_name="query", show_progress_bar=False)
-    else:
-        vector = _model.encode([query], show_progress_bar=False)
+    text = f"{BGE_QUERY_PREFIX}{query}" if _use_bge_query_prompt() else query
+    vector = _model.encode([text], show_progress_bar=False)
     return vector[0].tolist()
 
 

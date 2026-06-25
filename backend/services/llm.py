@@ -29,6 +29,13 @@ DECOMPOSE_SYSTEM_PROMPT = (
     "Return only a JSON array of strings, no explanation."
 )
 
+CONTEXTUALIZE_SYSTEM_PROMPT = (
+    "Given a conversation and a follow-up question, rewrite the follow-up into a "
+    "standalone question that includes all necessary context. "
+    "Resolve pronouns and references (it, they, that, etc.) using the conversation. "
+    "Return only the standalone question, no explanation."
+)
+
 
 def _encoding():
     try:
@@ -44,7 +51,23 @@ def count_tokens(text: str) -> int:
     return len(enc.encode(text))
 
 
-def build_prompt(query: str, chunks: list[dict]) -> str:
+def trim_history(history: list[dict]) -> list[dict]:
+    if not history:
+        return []
+    return history[-settings.max_history_turns :]
+
+
+def _format_history(history: list[dict]) -> str:
+    lines = []
+    for turn in trim_history(history):
+        role = str(turn.get("role", "user")).capitalize()
+        content = str(turn.get("content", "")).strip()
+        if content:
+            lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+def _build_source_context(chunks: list[dict]) -> str:
     source_blocks = []
     for chunk in chunks:
         cid = chunk.get("citation_id", chunk.get("id", 0))
@@ -52,8 +75,36 @@ def build_prompt(query: str, chunks: list[dict]) -> str:
             f'<source id="{cid}">\n{chunk["text"]}\n</source>\n'
             f"URL: {chunk['source']}"
         )
-    context = "\n\n".join(source_blocks)
-    return f"Sources:\n{context}\n\nQuestion: {query}"
+    return "\n\n".join(source_blocks)
+
+
+def build_prompt(
+    query: str,
+    chunks: list[dict],
+    history: list[dict] | None = None,
+) -> str:
+    context = _build_source_context(chunks)
+    parts = [f"Sources:\n{context}"]
+    formatted_history = _format_history(history or [])
+    if formatted_history:
+        parts.append(f"Previous conversation:\n{formatted_history}")
+    parts.append(f"Question: {query}")
+    return "\n\n".join(parts)
+
+
+def build_chat_messages(
+    query: str,
+    chunks: list[dict],
+    history: list[dict] | None = None,
+) -> list[dict]:
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for turn in trim_history(history or []):
+        role = turn.get("role")
+        content = str(turn.get("content", "")).strip()
+        if role in {"user", "assistant"} and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": build_prompt(query, chunks, history=[])})
+    return messages
 
 
 @retry(
@@ -87,6 +138,37 @@ async def _openrouter_completion(
         return response
 
 
+async def contextualize_query(query: str, history: list[dict]) -> str:
+    if not settings.enable_query_contextualization or not history:
+        return query
+
+    try:
+        response = await _openrouter_completion(
+            messages=[
+                {"role": "system", "content": CONTEXTUALIZE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Conversation:\n{_format_history(history)}\n\n"
+                        f"Follow-up question: {query}\n\n"
+                        "Standalone question:"
+                    ),
+                },
+            ],
+            model=settings.query_rewrite_model,
+            timeout=settings.query_rewrite_timeout,
+        )
+        content = response.json()["choices"][0]["message"]["content"]
+        if content:
+            standalone = content.strip().strip("\"'")
+            if standalone:
+                return standalone
+    except Exception as exc:
+        logger.warning("Query contextualization failed, using original: %s", exc)
+
+    return query
+
+
 async def rewrite_query(query: str) -> str:
     if not settings.enable_query_rewrite:
         return query
@@ -106,10 +188,11 @@ async def rewrite_query(query: str) -> str:
             model=settings.query_rewrite_model,
             timeout=settings.query_rewrite_timeout,
         )
-        data = response.json()
-        rewritten = data["choices"][0]["message"]["content"].strip()
-        if rewritten:
-            return rewritten.strip("\"'")
+        content = response.json()["choices"][0]["message"]["content"]
+        if content:
+            rewritten = content.strip().strip("\"'")
+            if rewritten:
+                return rewritten
     except Exception as exc:
         logger.warning("Query rewrite failed, using original query: %s", exc)
 
@@ -132,7 +215,10 @@ async def decompose_query(query: str) -> list[str]:
             model=settings.query_rewrite_model,
             timeout=settings.query_rewrite_timeout,
         )
-        raw = response.json()["choices"][0]["message"]["content"].strip()
+        content = response.json()["choices"][0]["message"]["content"]
+        if not content:
+            return [query]
+        raw = content.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -148,7 +234,11 @@ async def decompose_query(query: str) -> list[str]:
     return [query]
 
 
-async def stream_llm_response(prompt: str) -> AsyncIterator[str]:
+async def stream_llm_response(
+    query: str,
+    chunks: list[dict],
+    history: list[dict] | None = None,
+) -> AsyncIterator[str]:
     headers = {
         "Authorization": f"Bearer {settings.openrouter_api_key}",
         "HTTP-Referer": "http://localhost:3000",
@@ -156,10 +246,7 @@ async def stream_llm_response(prompt: str) -> AsyncIterator[str]:
     }
     payload = {
         "model": settings.openrouter_model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
+        "messages": build_chat_messages(query, chunks, history),
         "stream": True,
     }
 

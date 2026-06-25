@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections.abc import AsyncIterator
 
@@ -23,11 +24,39 @@ async def search(body: SearchRequest) -> EventSourceResponse:
 
     async def event_stream() -> AsyncIterator[dict]:
         original_query = body.query.strip()
+        history = [turn.model_dump() for turn in body.history]
+        prior_urls = body.prior_urls[: settings.max_search_urls]
         tracer = PipelineTracer(original_query)
+        stage_queue: asyncio.Queue[dict] = asyncio.Queue()
 
-        yield {"event": "status", "data": "Searching the web..."}
-        with tracer.stage("retrieval_pipeline"):
-            stage = await run_retrieval_stage(original_query)
+        async def on_stage(stage_id: str, state: str, label: str | None = None) -> None:
+            await stage_queue.put(
+                {
+                    "event": "stage",
+                    "data": json.dumps(
+                        {"id": stage_id, "state": state, "label": label or ""}
+                    ),
+                }
+            )
+
+        retrieval_task = asyncio.create_task(
+            run_retrieval_stage(
+                original_query,
+                on_stage=on_stage,
+                history=history,
+                prior_urls=prior_urls,
+            )
+        )
+
+        while not retrieval_task.done() or not stage_queue.empty():
+            try:
+                yield stage_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                if retrieval_task.done():
+                    break
+                await asyncio.sleep(0.05)
+
+        stage = await retrieval_task
 
         tracer.rewritten_query = stage.get("search_query")
         if stage.get("sub_queries"):
@@ -72,14 +101,35 @@ async def search(body: SearchRequest) -> EventSourceResponse:
         top_chunks = stage["top_chunks"]
         tracer.record_chunks(top_chunks)
 
-        yield {"event": "status", "data": "Generating answer..."}
-        prompt = build_prompt(original_query, top_chunks)
+        yield {
+            "event": "stage",
+            "data": json.dumps(
+                {
+                    "id": "generate",
+                    "state": "active",
+                    "label": "Generating answer",
+                }
+            ),
+        }
+
+        prompt = build_prompt(original_query, top_chunks, history=history)
         tracer.record_prompt_tokens(count_tokens(prompt))
 
         with tracer.stage("generation"):
-            async for token in stream_llm_response(prompt):
+            async for token in stream_llm_response(
+                original_query,
+                top_chunks,
+                history=history,
+            ):
                 tracer.add_completion_tokens(count_tokens(token))
                 yield {"event": "token", "data": token}
+
+        yield {
+            "event": "stage",
+            "data": json.dumps(
+                {"id": "generate", "state": "done", "label": "Generating answer"}
+            ),
+        }
 
         if settings.enable_debug_events:
             yield {"event": "debug", "data": json.dumps(tracer.summary())}
