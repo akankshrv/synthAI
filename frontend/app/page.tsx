@@ -26,6 +26,15 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
   return { event, data };
 }
 
+type DebugTrace = {
+  stages_ms?: Record<string, number>;
+  cache_stats?: Record<string, unknown>;
+  sub_queries?: string[];
+  chunk_count?: number;
+  total_latency_ms?: number;
+  top_chunks?: Array<Record<string, unknown>>;
+};
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [answer, setAnswer] = useState("");
@@ -33,6 +42,7 @@ export default function Home() {
   const [statusText, setStatusText] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
+  const [debugTrace, setDebugTrace] = useState<DebugTrace | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   async function handleSearch(event: FormEvent) {
@@ -47,6 +57,7 @@ export default function Home() {
     setAnswer("");
     setSources([]);
     setError("");
+    setDebugTrace(null);
     setStatusText("Starting...");
     setStatus("loading");
 
@@ -95,6 +106,8 @@ export default function Home() {
           } else if (parsed.event === "done") {
             setStatus("done");
             setStatusText("");
+          } else if (parsed.event === "debug") {
+            setDebugTrace(JSON.parse(parsed.data));
           }
         }
       }
@@ -167,6 +180,28 @@ export default function Home() {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {debugTrace && (
+        <section className="mb-8 rounded-xl border border-dashed border-[var(--border)] bg-[#0a0a0a] p-4 text-xs text-[var(--muted)]">
+          <h2 className="mb-2 font-medium text-[var(--muted)]">Debug trace</h2>
+          {debugTrace.sub_queries && debugTrace.sub_queries.length > 0 && (
+            <p className="mb-2">
+              Sub-queries: {debugTrace.sub_queries.join(" | ")}
+            </p>
+          )}
+          {debugTrace.cache_stats && (
+            <p className="mb-2">
+              Cache: {JSON.stringify(debugTrace.cache_stats)}
+            </p>
+          )}
+          {debugTrace.stages_ms && (
+            <p className="mb-2">
+              Stages (ms): {JSON.stringify(debugTrace.stages_ms)}
+            </p>
+          )}
+          <p>Total latency: {debugTrace.total_latency_ms ?? "—"} ms</p>
         </section>
       )}
 

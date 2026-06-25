@@ -7,14 +7,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes.search import router as search_router
 from core.config import settings
-from services.embedder import load_model
+from services.chroma_store import init_chroma, purge_expired_chunks
+from services.embedder import load_model, warm_models
+from services.url_cache import init_redis
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    load_model()  # loads embedding model + cross-encoder
+    load_model()
+    init_chroma()
+    purge_expired_chunks()
+    init_redis()
+    warm_models()
     yield
 
 

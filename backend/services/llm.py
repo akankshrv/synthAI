@@ -24,6 +24,11 @@ REWRITE_SYSTEM_PROMPT = (
     "Return only the improved search query, no explanation."
 )
 
+DECOMPOSE_SYSTEM_PROMPT = (
+    "Break complex questions into 1-3 concise web search sub-queries. "
+    "Return only a JSON array of strings, no explanation."
+)
+
 
 def _encoding():
     try:
@@ -109,6 +114,38 @@ async def rewrite_query(query: str) -> str:
         logger.warning("Query rewrite failed, using original query: %s", exc)
 
     return query
+
+
+async def decompose_query(query: str) -> list[str]:
+    if not settings.enable_query_decomposition:
+        return [query]
+
+    try:
+        response = await _openrouter_completion(
+            messages=[
+                {"role": "system", "content": DECOMPOSE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Question: {query}\n\nJSON array:",
+                },
+            ],
+            model=settings.query_rewrite_model,
+            timeout=settings.query_rewrite_timeout,
+        )
+        raw = response.json()["choices"][0]["message"]["content"].strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        sub_queries = json.loads(raw.strip())
+        if isinstance(sub_queries, list):
+            cleaned = [str(item).strip() for item in sub_queries if str(item).strip()]
+            if cleaned:
+                return cleaned[: settings.max_decomposed_queries]
+    except Exception as exc:
+        logger.warning("Query decomposition failed, using single query: %s", exc)
+
+    return [query]
 
 
 async def stream_llm_response(prompt: str) -> AsyncIterator[str]:

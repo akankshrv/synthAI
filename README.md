@@ -4,7 +4,7 @@ Perplexity-style search with hybrid retrieval, cross-encoder reranking, and SSE 
 
 ## Stack
 
-- **Backend**: FastAPI, sentence-transformers, Chroma (ephemeral), BM25, SSE streaming
+- **Backend**: FastAPI, BGE embeddings, persistent Chroma, Redis, BM25, SSE streaming
 - **Frontend**: Next.js
 
 ## Setup
@@ -18,6 +18,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 # add TAVILY_API_KEY and OPENROUTER_API_KEY
+docker compose up -d redis   # or local redis-server
 env -u PYTHONPATH uvicorn main:app --reload --port 8001
 ```
 
@@ -26,54 +27,44 @@ env -u PYTHONPATH uvicorn main:app --reload --port 8001
 ```bash
 cd frontend
 npm install
-cp .env.local.example .env.local
 npm run dev
 ```
 
 Open http://localhost:3000
 
-If imports fail with mixed Python versions, recreate the venv without `PYTHONPATH`:
-
-```bash
-env -u PYTHONPATH python3.11 -m venv .venv
-env -u PYTHONPATH .venv/bin/pip install -r requirements.txt
-env -u PYTHONPATH .venv/bin/uvicorn main:app --reload --port 8001
-```
-
 ## Pipeline
 
 ```
 POST /api/search
-  → optional query rewrite (OpenRouter, feature-flagged)
-  → Tavily (top 5 URLs, with retries)
-  → Jina Reader (parallel fetch, per-URL retries)
-  → token-aware chunking (RecursiveCharacterTextSplitter)
-  → hybrid retrieval: dense (Chroma) + sparse (BM25) → RRF fusion
-  → cross-encoder rerank (ms-marco-MiniLM-L-6-v2, top 8)
-  → OpenRouter LLM stream → frontend SSE
-  → optional debug trace event + traces.jsonl log
+  → query rewrite + decomposition (1-3 sub-queries)
+  → Tavily per sub-query (up to 8 URLs)
+  → L1 Redis page cache (TTL 24h)
+  → Jina for cache misses
+  → token-aware chunking (500 tokens, 50 overlap)
+  → Chroma ingest (hash + TTL 72h)
+  → dense (BGE) + BM25 → RRF → dedup → rerank → MMR → top 8
+  → OpenRouter LLM stream + debug SSE
 ```
 
 ## Evaluation
 
 ```bash
 cd backend
-env -u PYTHONPATH .venv/bin/python eval/run_eval.py 3   # quick run (3 queries)
-env -u PYTHONPATH .venv/bin/python eval/run_eval.py     # default 3 queries
-env -u PYTHONPATH .venv/bin/python eval/test_sse_integration.py  # mocked SSE test
+env -u PYTHONPATH .venv/bin/python eval/run_eval.py 3 --save-baseline
+env -u PYTHONPATH .venv/bin/python eval/run_eval.py 3 --no-rerank --no-bm25
+env -u PYTHONPATH .venv/bin/python eval/test_sse_integration.py
 ```
 
-## Env vars
+Ablation flags: `--no-rerank`, `--no-bm25`, `--no-cache`, `--no-mmr`, `--no-dedup`, `--no-decompose`
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TAVILY_API_KEY` | yes | Web search |
-| `OPENROUTER_API_KEY` | yes | LLM streaming |
-| `JINA_API_KEY` | no | Higher Jina rate limits |
-| `OPENROUTER_MODEL` | no | Default `openai/gpt-oss-120b:free` |
-| `ENABLE_QUERY_REWRITE` | no | Default `true` |
-| `QUERY_REWRITE_MODEL` | no | Default `openai/gpt-oss-20b:free` |
-| `ENABLE_DEBUG_EVENTS` | no | Emit SSE `debug` events (default `true`) |
-| `TRACE_LOG_PATH` | no | JSONL trace log (default `traces.jsonl`) |
-| `TOP_K` | no | Final chunks sent to LLM (default `8`) |
-| `RETRIEVAL_CANDIDATE_K` | no | Candidates per retriever before RRF (default `20`) |
+Baselines saved to `eval/baselines/`.
+
+## Key env vars
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | Dense retrieval model |
+| `CHUNK_SIZE_TOKENS` | `500` | Token-aware chunk size |
+| `REDIS_URL` | `redis://localhost:6379/0` | L1 page cache |
+| `CHROMA_TTL_HOURS` | `72` | Chroma chunk TTL |
+| `ENABLE_QUERY_DECOMPOSITION` | `true` | Multi sub-query search |

@@ -15,6 +15,7 @@ class PipelineTracer:
         self.retrieved_chunks: list[dict[str, Any]] = []
         self.prompt_token_count: int | None = None
         self.completion_token_count: int = 0
+        self.cache_stats: dict[str, Any] = {}
         self._stage_starts: dict[str, float] = {}
 
     @contextmanager
@@ -28,6 +29,9 @@ class PipelineTracer:
     def record_chunks(self, chunks: list[dict]) -> None:
         self.retrieved_chunks = chunks
 
+    def record_cache_stats(self, stats: dict) -> None:
+        self.cache_stats = stats
+
     def record_prompt_tokens(self, count: int) -> None:
         self.prompt_token_count = count
 
@@ -40,6 +44,7 @@ class PipelineTracer:
             "rewritten_query": self.rewritten_query,
             "stages_ms": self.stages,
             "retrieved_chunks": self.retrieved_chunks,
+            "cache_stats": self.cache_stats,
             "prompt_token_count": self.prompt_token_count,
             "completion_token_count": self.completion_token_count,
             "total_latency_ms": round(sum(self.stages.values()), 2),
@@ -51,6 +56,8 @@ class PipelineTracer:
             "original_query": data["original_query"],
             "rewritten_query": data["rewritten_query"],
             "stages_ms": data["stages_ms"],
+            "cache_stats": data.get("cache_stats", {}),
+            "sub_queries": data.get("cache_stats", {}).get("sub_queries", []),
             "chunk_count": len(data["retrieved_chunks"]),
             "top_chunks": [
                 {

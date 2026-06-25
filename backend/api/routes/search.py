@@ -6,10 +6,8 @@ from sse_starlette.sse import EventSourceResponse
 
 from core.config import settings
 from models.schemas import SearchRequest
-from services.llm import build_prompt, count_tokens, rewrite_query, stream_llm_response
-from services.retriever import retrieve_top_chunks
-from services.scraper import chunk_text, fetch_all_urls
-from services.search import tavily_search
+from services.llm import build_prompt, count_tokens, stream_llm_response
+from services.pipeline import run_retrieval_stage
 from services.tracer import PipelineTracer
 
 router = APIRouter()
@@ -27,53 +25,51 @@ async def search(body: SearchRequest) -> EventSourceResponse:
         original_query = body.query.strip()
         tracer = PipelineTracer(original_query)
 
-        with tracer.stage("query_rewrite"):
-            search_query = await rewrite_query(original_query)
-            tracer.rewritten_query = search_query
-
         yield {"event": "status", "data": "Searching the web..."}
-        try:
-            with tracer.stage("tavily_search"):
-                urls = await tavily_search(search_query)
-        except Exception:
-            yield {"event": "error", "data": "Web search failed. Please try again."}
+        with tracer.stage("retrieval_pipeline"):
+            stage = await run_retrieval_stage(original_query)
+
+        tracer.rewritten_query = stage.get("search_query")
+        if stage.get("sub_queries"):
+            tracer.record_cache_stats(
+                {
+                    **stage.get("fetch_stats", {}),
+                    **stage.get("ingest_stats", {}),
+                    "sub_queries": stage["sub_queries"],
+                }
+            )
+
+        if stage["error"] == "No search results found.":
+            yield {"event": "error", "data": stage["error"]}
             tracer.flush()
             return
 
-        if not urls:
-            yield {"event": "error", "data": "No search results found."}
-            tracer.flush()
-            return
+        yield {"event": "sources", "data": json.dumps(stage["urls"])}
 
-        yield {"event": "sources", "data": json.dumps(urls)}
-
-        yield {"event": "status", "data": "Reading pages..."}
-        with tracer.stage("fetch_pages"):
-            pages, succeeded = await fetch_all_urls(urls)
-
-        if succeeded < len(urls):
+        fetch_stats = stage.get("fetch_stats", {})
+        if fetch_stats.get("cache_hits"):
             yield {
                 "event": "status",
-                "data": f"Read {succeeded} of {len(urls)} sources successfully.",
+                "data": (
+                    f"L1 cache: {fetch_stats['cache_hits']} hit(s), "
+                    f"{fetch_stats.get('fetched', 0)} fetched."
+                ),
             }
-
-        chunks: list[dict] = []
-        with tracer.stage("chunking"):
-            for url, text in pages.items():
-                if text:
-                    chunks.extend(chunk_text(text, url))
-
-        if not chunks:
+        elif fetch_stats.get("failed"):
             yield {
-                "event": "error",
-                "data": "Could not extract content from search results.",
+                "event": "status",
+                "data": (
+                    f"Read {fetch_stats.get('fetched', 0)} of "
+                    f"{len(stage['urls'])} sources successfully."
+                ),
             }
+
+        if stage["error"]:
+            yield {"event": "error", "data": stage["error"]}
             tracer.flush()
             return
 
-        yield {"event": "status", "data": "Finding relevant passages..."}
-        with tracer.stage("retrieval"):
-            top_chunks = retrieve_top_chunks(search_query, chunks)
+        top_chunks = stage["top_chunks"]
         tracer.record_chunks(top_chunks)
 
         yield {"event": "status", "data": "Generating answer..."}

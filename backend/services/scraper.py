@@ -3,6 +3,7 @@ import logging
 import re
 
 import httpx
+import tiktoken
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -28,12 +29,24 @@ INJECTION_PATTERNS = [
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 SCRIPT_STYLE_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
 
+_TOKEN_ENCODER: tiktoken.Encoding | None = None
+
+
+def _token_length(text: str) -> int:
+    global _TOKEN_ENCODER
+    if _TOKEN_ENCODER is None:
+        try:
+            _TOKEN_ENCODER = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            return len(text)
+    return len(_TOKEN_ENCODER.encode(text))
+
 
 def _get_splitter() -> RecursiveCharacterTextSplitter:
     return RecursiveCharacterTextSplitter(
-        chunk_size=settings.chunk_size,
-        chunk_overlap=settings.chunk_overlap,
-        length_function=len,
+        chunk_size=settings.chunk_size_tokens,
+        chunk_overlap=settings.chunk_overlap_tokens,
+        length_function=_token_length,
         separators=["\n\n", "\n", ". ", " ", ""],
     )
 
@@ -109,7 +122,7 @@ def chunk_text(text: str, source: str) -> list[dict]:
     chunks: list[dict] = []
     for paragraph in raw_chunks:
         paragraph = paragraph.strip()
-        if len(paragraph) < 80:
+        if len(paragraph) < 20:
             continue
         if contains_injection(paragraph):
             logger.debug("Skipping chunk with injection pattern from %s", source)
