@@ -1,0 +1,127 @@
+[
+  {
+    "query": "What is the capital of France?",
+    "expected_summary": "Paris is the capital of France.",
+    "expected_domains": ["wikipedia.org", "britannica.com"]
+  },
+  {
+    "query": "How does photosynthesis work?",
+    "expected_summary": "Plants convert sunlight, water, and CO2 into glucose and oxygen using chlorophyll.",
+    "expected_domains": ["wikipedia.org", "nationalgeographic.com", "britannica.com"]
+  },
+  {
+    "query": "Who wrote Romeo and Juliet?",
+    "expected_summary": "William Shakespeare wrote Romeo and Juliet.",
+    "expected_domains": ["wikipedia.org", "britannica.com"]
+  },
+  {
+    "query": "What is the speed of light in vacuum?",
+    "expected_summary": "Approximately 299,792,458 meters per second.",
+    "expected_domains": ["wikipedia.org", "nasa.gov", "britannica.com"]
+  },
+  {
+    "query": "When did World War II end?",
+    "expected_summary": "World War II ended in 1945.",
+    "expected_domains": ["wikipedia.org", "history.com", "britannica.com"]
+  },
+  {
+    "query": "What is machine learning?",
+    "expected_summary": "Machine learning is a branch of AI where systems learn patterns from data.",
+    "expected_domains": ["wikipedia.org", "ibm.com", "google.com"]
+  },
+  {
+    "query": "How many planets are in our solar system?",
+    "expected_summary": "There are eight planets in our solar system.",
+    "expected_domains": ["nasa.gov", "wikipedia.org"]
+  },
+  {
+    "query": "What causes earthquakes?",
+    "expected_summary": "Earthquakes are caused by sudden release of energy along fault lines in the Earth's crust.",
+    "expected_domains": ["usgs.gov", "wikipedia.org", "nationalgeographic.com"]
+  },
+  {
+    "query": "Who painted the Mona Lisa?",
+    "expected_summary": "Leonardo da Vinci painted the Mona Lisa.",
+    "expected_domains": ["wikipedia.org", "louvre.fr", "britannica.com"]
+  },
+  {
+    "query": "What is the boiling point of water at sea level?",
+    "expected_summary": "Water boils at 100 degrees Celsius or 212 degrees Fahrenheit at sea level.",
+    "expected_domains": ["wikipedia.org", "britannica.com"]
+  },
+  {
+    "query": "What is Python programming language used for?",
+    "expected_summary": "Python is used for web development, data science, automation, and general-purpose programming.",
+    "expected_domains": ["python.org", "wikipedia.org"]
+  },
+  {
+    "query": "How does the human heart work?",
+    "expected_summary": "The heart pumps blood through the body using four chambers and valves.",
+    "expected_domains": ["nih.gov", "wikipedia.org", "mayoclinic.org"]
+  },
+  {
+    "query": "What is climate change?",
+    "expected_summary": "Climate change refers to long-term shifts in global temperatures and weather patterns, largely driven by human activity.",
+    "expected_domains": ["nasa.gov", "un.org", "wikipedia.org"]
+  },
+  {
+    "query": "Who invented the telephone?",
+    "expected_summary": "Alexander Graham Bell is credited with inventing the telephone.",
+    "expected_domains": ["wikipedia.org", "britannica.com", "history.com"]
+  },
+  {
+    "query": "What is the largest ocean on Earth?",
+    "expected_summary": "The Pacific Ocean is the largest ocean on Earth.",
+    "expected_domains": ["wikipedia.org", "nationalgeographic.com"]
+  },
+  {
+    "query": "How do vaccines work?",
+    "expected_summary": "Vaccines train the immune system to recognize and fight pathogens without causing disease.",
+    "expected_domains": ["cdc.gov", "who.int", "wikipedia.org"]
+  },
+  {
+    "query": "What is blockchain technology?",
+    "expected_summary": "Blockchain is a distributed ledger technology that records transactions across many computers.",
+    "expected_domains": ["wikipedia.org", "ibm.com", "investopedia.com"]
+  },
+  {
+    "query": "When was the Declaration of Independence signed?",
+    "expected_summary": "The Declaration of Independence was signed in 1776.",
+    "expected_domains": ["archives.gov", "wikipedia.org", "history.com"]
+  },
+  {
+    "query": "What is the tallest mountain in the world?",
+    "expected_summary": "Mount Everest is the tallest mountain above sea level.",
+    "expected_domains": ["wikipedia.org", "nationalgeographic.com"]
+  },
+  {
+    "query": "How does Wi-Fi work?",
+    "expected_summary": "Wi-Fi uses radio waves to wirelessly connect devices to a network via a router.",
+    "expected_domains": ["wikipedia.org", "howstuffworks.com", "ieee.org"]
+  },
+  {
+    "query": "What is the GDP of the United States?",
+    "expected_summary": "The US GDP is one of the largest in the world, measured in trillions of dollars annually.",
+    "expected_domains": ["bea.gov", "wikipedia.org", "worldbank.org"]
+  },
+  {
+    "query": "Who discovered penicillin?",
+    "expected_summary": "Alexander Fleming discovered penicillin in 1928.",
+    "expected_domains": ["wikipedia.org", "nih.gov", "britannica.com"]
+  },
+  {
+    "query": "What is quantum computing?",
+    "expected_summary": "Quantum computing uses quantum bits to perform computations leveraging superposition and entanglement.",
+    "expected_domains": ["ibm.com", "wikipedia.org", "mit.edu"]
+  },
+  {
+    "query": "How many bones are in the adult human body?",
+    "expected_summary": "An adult human body has 206 bones.",
+    "expected_domains": ["wikipedia.org", "nih.gov", "mayoclinic.org"]
+  },
+  {
+    "query": "What is the Pythagorean theorem?",
+    "expected_summary": "In a right triangle, a squared plus b squared equals c squared.",
+    "expected_domains": ["wikipedia.org", "khanacademy.org", "britannica.com"]
+  }
+]

@@ -1,3 +1,5 @@
+import logging
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,10 +9,12 @@ from api.routes.search import router as search_router
 from core.config import settings
 from services.embedder import load_model
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    load_model()
+    load_model()  # loads embedding model + cross-encoder
     yield
 
 
